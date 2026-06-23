@@ -1,10 +1,10 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: my-app
-  namespace: default
   labels:
     app: my-app
+  name: my-app
+  namespace: default
 spec:
   replicas: 1
   selector:
@@ -16,10 +16,10 @@ spec:
         app: my-app
     spec:
       containers:
-      - name: main
-        image: nginx:alpine
+      - image: nginx:alpine
+        name: main
         resources:
           limits:
-            memory: "64Mi"
+            memory: 64Mi
           requests:
-            memory: "32Mi"
+            memory: 32Mi
