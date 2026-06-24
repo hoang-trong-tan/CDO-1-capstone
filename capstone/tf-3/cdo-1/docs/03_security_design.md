@@ -242,18 +242,110 @@ cluster.
 
 ### 5.1 What to Log
 
-<!-- AI engine decision fields, Infrastructure change tracking, K8s API mutation, app errors -->
+Audit logging covers the events needed to explain who requested a change, what
+the system decided, what was applied, and whether security controls intervened.
+
+Events:
+
+- Patch request received.
+- Policy evaluation result.
+- AI decision received from AIOps, if applicable.
+- Direct patch approved, rejected, or blocked.
+- GitOps reconciliation started and completed.
+- Kubernetes resource mutation attempted and completed.
+- Cross-account role assumption.
+- Secret read by workload role.
+- Escalation notification published to SNS.
+- Security violation or policy block.
+- Firehose delivery failure.
+
+Required audit fields:
+
+| Field | Purpose |
+|---|---|
+| `event_id` | Unique event identifier |
+| `timestamp` | UTC event time |
+| `severity` | `INFO`, `WARN`, `ERROR`, `SECURITY` |
+| `correlation_id` | Trace a request across receiver, controller, GitOps, and audit writer |
+| `tenant_id` | Identify tenant / namespace ownership |
+| `actor` | Human, workload, or assumed role that initiated the action |
+| `action_type` | Request, decision, mutation, escalation, or control event |
+| `resource_ref` | Target Kubernetes, AWS, or Git resource |
+| `decision` | `APPROVED`, `REJECTED`, `POLICY_BLOCKED`, `SECURITY_VIOLATION` |
+| `reason` | Human-readable explanation safe for logs |
+
+Sample audit event:
+
+```json
+{
+  "event_id": "evt-01JZ7X6YQ5G7Y7V9VK2P0S6E2A",
+  "timestamp": "2026-06-25T09:30:00Z",
+  "severity": "SECURITY",
+  "correlation_id": "corr-cdo-20260625-0017",
+  "tenant_id": "tenant-a",
+  "actor": "arn:aws:sts::111122223333:assumed-role/irsa-patch-controller/session",
+  "action_type": "K8S_MUTATION",
+  "resource_ref": "deployment/tenant-a/api",
+  "decision": "POLICY_BLOCKED",
+  "reason": "Attempted mutation outside approved namespace"
+}
+```
 
 ### 5.2 Storage + Retention
 
 | Log type | Storage | Retention | Query interface |
 |---|---|---|---|
-| | | | |
+| Application audit events | Kinesis Firehose to S3 Object Lock bucket | 1 year hot query, longer archive per compliance policy | Athena |
+| EKS API server audit logs | CloudWatch Logs encrypted log group | 90 days hot retention | CloudWatch Logs Insights |
+| CloudTrail management events | CloudTrail organization trail to S3 | 1 year hot query, archive after | Athena / CloudTrail Lake if enabled |
+| CloudTrail S3 data events | CloudTrail data event trail for audit bucket | 1 year hot query | Athena |
+| Secrets Manager access events | CloudTrail management events | 1 year hot query | Athena / CloudWatch metric filters |
+| Security alerts | CloudWatch Alarms and SNS notifications | Alarm history per CloudWatch retention | CloudWatch |
+
+Pipeline:
+
+1. Workloads emit structured JSON audit events.
+2. Audit Writer sends events to Kinesis Firehose through the private endpoint.
+3. Firehose buffers, encrypts, and writes partitioned objects to the S3 audit
+   bucket.
+4. S3 Object Lock protects audit records from deletion or overwrite during the
+   retention window.
+5. Athena external tables query audit partitions by date, tenant, severity, and
+   action type.
+
+Firehose failed delivery handling:
+
+- Firehose writes failed records to a dedicated S3 error prefix.
+- CloudWatch metrics track delivery failures and throttling.
+- A CloudWatch Alarm publishes to the escalation SNS topic when delivery failure
+  count is greater than zero for the configured evaluation window.
+- Replay is handled from the error prefix after the delivery issue is resolved.
 
 ### 5.3 PII Handling (basic)
 
 - Schema whitelist.
 - Redaction at ingest.
+- Audit payloads store resource identifiers and policy outcomes, not request
+  bodies containing user data.
+- Tenant identifiers are required for accountability but are treated as
+  sensitive operational metadata.
+
+### 5.4 Security Alerting
+
+CloudWatch Metric Filters monitor structured audit events for:
+
+- `decision = "SECURITY_VIOLATION"`
+- `decision = "POLICY_BLOCKED"`
+- `severity = "SECURITY"`
+- Firehose delivery failures.
+- Unexpected `secretsmanager:GetSecretValue` by a role outside the approved IRSA
+  allowlist.
+
+Alerts publish to the escalation SNS topic. SNS subscriptions are limited to the
+approved incident response channel and on-call recipients. Alert messages include
+`event_id`, `correlation_id`, `tenant_id`, `severity`, `action_type`, and
+`resource_ref` so responders can query the full audit trail without exposing
+secret values.
 
 ---
 
