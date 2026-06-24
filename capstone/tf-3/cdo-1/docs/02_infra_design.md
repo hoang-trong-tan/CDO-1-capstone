@@ -26,20 +26,252 @@
 
 ### 3.1 Why this angle?
 
-<!-- Tại sao chọn hướng tiếp cận này? Lý do chi tiết -->
+Nhóm chọn **GitOps Hybrid AWS & K8s Stack** vì hệ thống hơn 200 microservice có hai nhóm remediation với latency và governance requirement khác nhau. Incident ảnh hưởng trực tiếp đến người dùng được xử lý bằng Direct Patch Engine chạy trong EKS, trong khi thay đổi không khẩn cấp hoặc làm thay đổi desired state sẽ đi qua Git, Argo Workflows và ArgoCD để giữ Git là source of truth. Với mục tiêu auto-resolve tối thiểu 60%, AI chỉ đề xuất action; quyền thực thi cuối cùng vẫn bị kiểm soát bởi action allowlist, blast-radius policy, DynamoDB idempotency lock và verification rule. Mọi execution đều tạo canonical audit record trong S3 Object Lock; persistent change còn lưu Git commit SHA, ArgoCD revision và pre/post Kubernetes state để tạo tamper-evident provenance.
 
-### 3.2 Vượt trội ở đâu (số liệu)
+---
 
-| Axis | My number | Competing angle estimate |
-|---|---|---|
-| Cost / tenant / month | $X | $Y |
-| P99 latency | Xms | Yms |
-| Ops overhead (hr/week) | X | Y |
-| Time to onboard tenant | X min | Y min |
+### 3.2 Vượt trội ở đâu?
+
+**Competing angle:** AWS Serverless Orchestration — API Gateway, Step Functions và Lambda.
+
+| Axis                                  | My number — GitOps Hybrid | Competing angle estimate — AWS Serverless |
+| ------------------------------------- | ------------------------: | ----------------------------------------: |
+| Cost / tenant / month                 |                **$86.78** |                                **$75.66** |
+| P99 latency to emergency action start |           **≤ 15,000 ms** |                           **≤ 20,000 ms** |
+| Ops overhead                          |           **2–3 hr/week** |                     **0.75–1.25 hr/week** |
+| Time to onboard one tenant            |           **180–240 min** |                           **240–360 min** |
+
+#### Cost assumptions
+
+* Region: `us-east-1`.
+* 730 hours/month.
+* Hai tenant trong sandbox.
+* Trung bình ba `t3.medium` Spot node hoạt động liên tục.
+* Spot price assumption do Task 1 cung cấp: `$0.023/node-hour`.
+* ALB sử dụng trung bình một LCU.
+* 10 GB audit data/tháng.
+* Sáu Secrets Manager secrets.
+* Observability low-volume estimate: `$8/month`.
+* Chưa gồm NAT Gateway, EBS volumes, RDS storage/backups, KMS requests, data transfer và support plan.
+
+#### GitOps Hybrid calculation
+
+| Component                     |  Monthly estimate |
+| ----------------------------- | ----------------: |
+| EKS control plane             |            $73.00 |
+| 3 Spot `t3.medium` nodes      |            $50.37 |
+| ALB base + 1 average LCU      |            $22.27 |
+| RDS PostgreSQL Single-AZ      |            $15.00 |
+| DynamoDB On-Demand            |             $2.00 |
+| S3 audit storage — 10 GB      |             $0.23 |
+| Data Firehose — 10 GB         |             $0.29 |
+| Secrets Manager — 6 secrets   |             $2.40 |
+| Prometheus/Grafana/CloudWatch |             $8.00 |
+| **Total sandbox**             | **$173.56/month** |
+| **Cost per tenant**           |  **$86.78/month** |
+
+Node calculation:
+
+```text
+3 nodes × $0.023/hour × 730 hours
+= $50.37/month
+```
+
+ALB calculation:
+
+```text
+Base:
+$0.0225/hour × 730
+= $16.43/month
+
+1 average LCU:
+$0.008/LCU-hour × 730
+= $5.84/month
+
+Total ALB:
+$16.43 + $5.84
+= $22.27/month
+```
+
+Audit calculation:
+
+```text
+S3:
+10 GB × $0.023
+= $0.23/month
+
+Firehose:
+10 GB × $0.029
+= $0.29/month
+```
+
+Total per tenant:
+
+```text
+$173.56 / 2 tenants
+= $86.78/tenant/month
+```
+
+#### Competing serverless estimate
+
+Để so sánh công bằng, competing angle vẫn giữ các thành phần chung:
+
+* EKS và Karpenter-managed workload nodes;
+* RDS PostgreSQL;
+* DynamoDB;
+* S3 Object Lock;
+* Data Firehose;
+* Secrets Manager;
+* Prometheus/Grafana/CloudWatch.
+
+Các thành phần được thay đổi:
+
+```text
+FastAPI Receiver + Internal ALB
+→ API Gateway
+
+Argo Workflows orchestration
+→ Step Functions
+
+In-cluster workflow tasks
+→ Lambda
+```
+
+Với 400 incident/tháng và 60% auto-resolve:
+
+```text
+240 auto-resolved × 14 transitions = 3,360
+160 escalated × 8 transitions      = 1,280
+
+Total = 4,640 transitions/month
+```
+
+Sau free tier, Step Functions cost được ước tính khoảng:
+
+```text
+(4,640 − 4,000) × $0.000025
+= $0.016/month
+```
+
+Ở traffic sandbox, API Gateway và Lambda request/compute cost được làm tròn thành khoảng `$0.02/month`.
+
+| Component                         |  Monthly estimate |
+| --------------------------------- | ----------------: |
+| EKS control plane                 |            $73.00 |
+| 3 Spot `t3.medium` nodes          |            $50.37 |
+| RDS PostgreSQL                    |            $15.00 |
+| DynamoDB                          |             $2.00 |
+| S3 audit storage                  |             $0.23 |
+| Data Firehose                     |             $0.29 |
+| Secrets Manager                   |             $2.40 |
+| Observability                     |             $8.00 |
+| Step Functions/Lambda/API Gateway |             $0.02 |
+| **Total sandbox**                 | **$151.31/month** |
+| **Cost per tenant**               |  **$75.66/month** |
+
+#### P99 latency estimate
+
+GitOps Hybrid emergency path:
+
+```text
+ALB routing                         ~100–300 ms
+Receiver validation                ~100 ms
+AI /detect + /decide               ≤800 ms
+DynamoDB lock + policy checks      ~100–300 ms
+In-cluster Kubernetes API patch    ~500–2,000 ms
+Scheduling/network safety margin   remaining budget
+
+P99 design target                  ≤15,000 ms
+```
+
+Serverless competing path:
+
+```text
+API Gateway
+→ Lambda cold/warm invocation
+→ Step Functions transitions
+→ external authentication/network path to EKS
+```
+
+Do đó P99 design estimate được đặt ở `≤20,000 ms`.
+
+Hai con số này đo từ lúc nhận alert đến lúc **bắt đầu action**, không phải đến lúc service được xác nhận hoàn toàn healthy. Pod rollout và verification window được đo riêng.
+
+#### Ops overhead estimate
+
+GitOps Hybrid cần khoảng `2–3 hr/week` để:
+
+* kiểm tra Argo Workflows controller;
+* theo dõi FastAPI Receiver và AlertManager integration;
+* review WorkflowTemplate;
+* review Karpenter NodePool/EC2NodeClass;
+* kiểm tra Spot interruption và node consolidation;
+* kiểm tra RBAC, ESO và DynamoDB stale lock;
+* replay workflow thất bại.
+
+Serverless angle cần khoảng `0.75–1.25 hr/week` để:
+
+* kiểm tra failed Step Functions executions;
+* review DLQ và CloudWatch alarms;
+* cập nhật Lambda dependencies;
+* kiểm tra IAM policy và API Gateway authentication.
+
+#### Tenant onboarding estimate
+
+GitOps Hybrid:
+
+```text
+Namespace, quota và RBAC                 30–45 min
+Git path và ArgoCD Application           30–45 min
+Secrets Manager + ESO mapping            20–30 min
+Alert rules và workflow parameters       45–60 min
+Audit, lock và remediation smoke test    45–60 min
+
+Total                                    180–240 min
+```
+
+Serverless competing angle:
+
+```text
+Tenant configuration                     30–45 min
+API Gateway/auth configuration           30–45 min
+State machine and Lambda parameters       45–60 min
+IAM role + EKS access/RBAC mapping        60–90 min
+End-to-end remediation and audit test     75–120 min
+
+Total                                     240–360 min
+```
+
+---
 
 ### 3.3 Weakness chấp nhận
 
-<!-- Honest về trade-off. Reviewer thích honesty hơn là "everything is great" -->
+#### Trade-off 1 — Chi phí cao hơn serverless
+
+GitOps Hybrid có chi phí cao hơn:
+
+```text
+$86.78 − $75.66
+= $11.12/tenant/month
+```
+
+Tương đương:
+
+```text
+$11.12 / $75.66 × 100
+≈ 14.7%
+```
+
+Nhóm chấp nhận mức chênh lệch này để emergency remediation sử dụng in-cluster Kubernetes ServiceAccount/RBAC, giảm external-to-EKS execution path và giữ Argo Workflows, ArgoCD, Kubernetes event cùng một operational boundary.
+
+**Mitigation:** ALB chỉ được giữ nếu AlertManager hoặc alert source nằm ngoài cluster. Nếu AlertManager chạy trong cùng EKS, Receiver sẽ dùng ClusterIP nội bộ và có thể loại bỏ khoảng `$22.27/month`, khiến Hybrid cost giảm xuống khoảng `$75.64/tenant/month`, gần tương đương competing angle.
+
+#### Trade-off 2 — Tăng operational complexity và Spot interruption risk
+
+Hybrid yêu cầu nhóm tự vận hành Argo Workflows, FastAPI Receiver, Karpenter, Kubernetes RBAC và node capacity. Việc dùng Spot node giúp giảm chi phí nhưng có nguy cơ interruption hoặc thiếu capacity đúng lúc workflow cần chạy.
+
+**Mitigation:** duy trì một baseline On-Demand NodePool cho ArgoCD, Receiver, Argo Workflows controller và các platform component; Spot NodePool chỉ dùng cho application workloads và short-lived workflow pods. Karpenter NodePool phải cho phép nhiều instance family/type, sử dụng PodDisruptionBudget, topology spread và interruption handling để tránh phụ thuộc một loại Spot capacity duy nhất.
+
 
 ## 4. Multi-tenant approach
 
