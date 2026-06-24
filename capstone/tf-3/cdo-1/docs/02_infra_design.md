@@ -229,6 +229,127 @@ Worker có thể kiểm tra tenant nhanh mà chưa cần deserialize toàn bộ 
 Sau này có thể route message theo tenant hoặc severity.
 Khi message vào DLQ, việc debug theo tenant dễ hơn.
 
+4.2.2. Execution isolation
+
+Hệ thống có 2 execution path, nên cách tách quyền cũng được thiết kế riêng cho từng path.
+
+Path 1: Direct Patch path
+
+Direct Patch path dùng cho lỗi khẩn cấp như OOMKilled, CrashLoopBackOff hoặc service stuck. Mục tiêu là xử lý nhanh để giảm MTTR.
+
+Luồng:
+
+Webhook Receiver
+→ Policy Guardrail
+→ Direct Patch Engine
+→ Kubernetes API
+→ Verify
+→ Audit
+
+Direct Patch Engine chạy in-process cùng Pod với Webhook Receiver và dùng load_incluster_config() để gọi Kubernetes API trong cluster.
+
+ServiceAccount:
+
+Name: selfheal-executor
+Namespace: self-heal-system
+
+ServiceAccount này không được cấp quyền cluster-wide cho remediation. Thay vào đó, nó được bind bằng RoleBinding theo từng namespace tenant.
+
+Ví dụ:
+
+RoleBinding trong namespace tenant-payment:
+selfheal-executor → Role patch-deployments
+
+RoleBinding trong namespace tenant-checkout:
+selfheal-executor → Role patch-deployments
+
+Quyền cho phép:
+
+Allowed:
+- get/list/watch pods
+- get/list/watch events
+- get/list/watch deployments
+- patch deployment trong namespace được phép
+- restart workload trong namespace được phép
+
+Quyền bị chặn:
+
+Blocked:
+- access kube-system
+- delete namespace
+- patch ClusterRole / ClusterRoleBinding
+- modify namespace của tenant khác
+- delete service/deployment nếu không có approval
+
+Ví dụ:
+
+tnt-payment-demo chỉ được restart payment-api trong namespace tenant-payment.
+Nếu cố restart checkout-api trong namespace tenant-checkout → bị chặn bởi middleware và RBAC.
+
+Như vậy, Direct Patch path có 2 lớp bảo vệ:
+
+Lớp 1: FastAPI middleware validate tenant_id và namespace
+Lớp 2: Kubernetes RBAC chặn nếu code cố thao tác sai namespace
+Path 2: GitOps path
+
+GitOps path dùng cho các lỗi không quá khẩn cấp hoặc thay đổi cấu hình lâu dài, ví dụ queue backlog cần scale pod, tăng memory limit hoặc cập nhật config.
+
+Luồng:
+
+Webhook Receiver
+→ Argo Workflow
+→ Git Commit Engine
+→ GitHub repo
+→ ArgoCD sync
+→ Tenant namespace
+→ Verify
+→ Audit
+
+Mỗi tenant có folder Git riêng:
+
+gitops-state/
+└── tenants/
+    ├── tnt-payment-demo/
+    │   └── manifests/
+    └── tnt-checkout-demo/
+        └── manifests/
+
+Mỗi tenant có một ArgoCD Application riêng:
+
+selfheal-tnt-payment-demo
+selfheal-tnt-checkout-demo
+
+Tuy nhiên, chỉ có ArgoCD Application riêng là chưa đủ. Để enforce isolation tốt hơn, mỗi tenant cần có ArgoCD AppProject giới hạn source repo và namespace đích.
+
+Ví dụ AppProject cho tnt-payment-demo:
+
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: selfheal-payment
+  namespace: argocd
+spec:
+  sourceRepos:
+    - https://github.com/<org>/<repo>
+  destinations:
+    - namespace: tenant-payment
+      server: https://kubernetes.default.svc
+
+Ý nghĩa:
+
+App của tnt-payment-demo chỉ được sync manifest vào namespace tenant-payment.
+App này không được sync sang namespace tenant-checkout.
+Nếu Git Commit Engine hoặc manifest bị lỗi path, ArgoCD AppProject vẫn là lớp chặn cuối.
+
+Tóm lại:
+
+Direct Patch path isolation = tenant validation + namespace RBAC
+GitOps path isolation = Git folder riêng + ArgoCD Application riêng + AppProject giới hạn namespace
+Data isolation = tenant_id partition + S3 prefix + SQS MessageAttributes
+
+
+
+
 
 # 5. Alternatives Considered & Infrastructure Components
 
