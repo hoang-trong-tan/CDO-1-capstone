@@ -173,7 +173,7 @@ Không dùng `develop` vì Capstone chỉ có một sandbox.
 
 ## 3. GitOps
 ### 3.1 Tool
-Nhóm dùng **ArgoCD** để đồng bộ desired state từ GitHub xuống EKS.
+Nhóm dùng **ArgoCD** để đồng bộ desired state từ AWS CodeCommit Config Repo xuống EKS. GitHub chỉ dùng cho source code repository và CI pipeline; runtime GitOps không pull trực tiếp từ GitHub vì private subnets không dùng NAT Gateway.
 Terraform chỉ bootstrap controller. ArgoCD quản lý:
 - Receiver và Worker;
 - Service, Ingress, ConfigMap;
@@ -297,9 +297,11 @@ Image build một lần và promote bằng digest.
 | Git read credential | ArgoCD |
 | Git write credential | Argo Workflow |
 | RDS credentials | Runtime |
-| Slack webhook | Escalation |
+| SNS Topic / Chatbot | Escalation |
 | ArgoCD bootstrap credential | Platform admin |
 | AI authentication | Worker nếu không dùng SigV4 |
+
+Do EKS cluster chạy trong private subnets không có NAT Gateway, runtime escalation bắt buộc phải gửi sự kiện qua AWS SNS / EventBridge thay vì gọi trực tiếp Slack webhook công cộng từ các private pods. Thông báo Slack (nếu cần) sẽ đi qua AWS Chatbot hoặc các subscriber bên ngoài VPC. Slack webhook trong GitHub Actions chỉ dùng để thông báo trạng thái CI.
 
 ## 7. Tenant onboarding deployment
 Không dùng Step Functions.
@@ -314,10 +316,10 @@ Không dùng Step Functions.
 7. Tenant READY
 ```
 
-| Tenant ID | Namespace |
-|---|---|
-| `tnt-payment-demo` | `tenant-payment` |
-| `tnt-checkout-demo` | `tenant-checkout` |
+| Tenant ID (UUID v4) | Tenant Alias | Namespace |
+|---|---|---|
+| `8f3b23c9-0291-4c12-881b-5e60d1f7d24a` | `tnt-payment-demo` | `tenant-payment` |
+| `1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d` | `tnt-checkout-demo` | `tenant-checkout` |
 Tenant config gồm:
 - tenant ID, namespace, owner;
 - quota và allowed pattern;
