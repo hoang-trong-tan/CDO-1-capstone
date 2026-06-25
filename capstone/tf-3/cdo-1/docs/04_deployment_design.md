@@ -201,6 +201,7 @@ Worker tạo Workflow
 
 Commit remediation chứa incident, correlation, tenant, action và target.
 ### 3.2 Sync waves
+
 | Wave | Components |
 |---:|---|
 | `-4` | Namespace |
@@ -290,6 +291,7 @@ Image build một lần và promote bằng digest.
 - Gitleaks chạy trên Pull Request.
 - Secret bị lộ phải rotate.
 - Rotation: Secrets Manager → ESO → restart nếu cần → health check.
+
 | Secret | Consumer |
 |---|---|
 | Git read credential | ArgoCD |
