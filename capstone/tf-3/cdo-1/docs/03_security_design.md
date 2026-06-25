@@ -18,113 +18,63 @@ Hệ thống tiếp nhận alert qua 2 luồng chính:
 
 ```mermaid
 flowchart TB
-    %% External / AWS control-plane event sources
+    %% External event sources
     cloudwatch["CloudWatch / EventBridge Alarms"]
-    operator["Operator / Mentor<br/>(Demo/Admin via VPN/Internal Client)"]
+    operator["Operator / Mentor (Demo/Admin)"]
 
-    subgraph VPC["AWS Cloud Sandbox VPC - No Public Workload IP"]
-        direction TB
+    subgraph VPC["AWS Cloud Sandbox VPC (No Public IP)"]
+        relay["Internal Alert Relay (Lambda)"]
+        alb["Internal ALB (Private Only)"]
+        rds[("RDS PostgreSQL (Sandbox DB)")]
+        vpce["VPC Endpoints (S3, DynamoDB, KMS, ECR, etc.)"]
 
-        subgraph PrivateSubnets["Private Subnets"]
-            direction TB
-
-            relay["Internal Alert Relay<br/>Lambda in VPC / Internal Integration"]
-            alb["Internal ALB<br/>private only / TLS 1.2+"]
-
-            subgraph EKS["EKS Cluster"]
-                direction TB
-
-                subgraph Observability["observability Namespace"]
-                    alertmanager["Prometheus AlertManager"]
-                    prometheus["Prometheus"]
-                    grafana["Grafana"]
-                end
-
-                subgraph SelfHeal["self-heal-system Namespace"]
-                    receiver["FastAPI Webhook Receiver"]
-                    controller["Self-Heal Controller<br/>Direct Patch Engine"]
-                    ai["AI Engine<br/>/detect /decide /verify"]
-                    commitengine["Git Commit Engine"]
-                end
-
-                subgraph ArgoCDNS["argocd Namespace"]
-                    argocd["ArgoCD Controller"]
-                end
-
-                subgraph TenantNS["tenant-a / tenant-b Namespaces"]
-                    tenantapp["Tenant Applications"]
-                end
-            end
-
-            rds[("RDS PostgreSQL<br/>Sandbox Config DB")]
-        end
-
-        subgraph VPCE["VPC Gateway / Interface Endpoints"]
-            direction LR
-            s3ep["S3 Gateway"]
-            dynamoep["DynamoDB Gateway"]
-            smep["Secrets Manager"]
-            kmsep["KMS"]
-            firehoseep["Kinesis Firehose"]
-            codeep["CodeCommit Git/API"]
-            snsep["SNS"]
-            cwlep["CloudWatch Logs"]
-            ecrep["ECR API + Docker"]
-            stsep["STS"]
+        subgraph EKS["EKS Cluster"]
+            alertmanager["Prometheus AlertManager<br/>(observability namespace)"]
+            receiver["Webhook Receiver (FastAPI)<br/>(self-heal-system namespace)"]
+            controller["Self-Heal Controller (Direct Patch)<br/>(self-heal-system namespace)"]
+            commitengine["Git Commit Engine<br/>(self-heal-system namespace)"]
+            ai["AI Engine (/detect /decide)<br/>(self-heal-system namespace)"]
+            argocd["ArgoCD Controller<br/>(argocd namespace)"]
+            tenantapp["Tenant Applications<br/>(tenant-a/b namespaces)"]
         end
     end
 
     subgraph AWSServices["AWS Managed Services"]
-        direction TB
-        codecommit[("AWS CodeCommit<br/>Config Repo")]
+        codecommit[("AWS CodeCommit (Config Repo)")]
         firehose["Kinesis Firehose"]
-        s3[("S3 Audit Bucket<br/>Object Lock")]
-        dynamodb[("DynamoDB<br/>State / Lock / Idempotency")]
+        s3[("S3 Audit Bucket (Object Lock)")]
+        dynamodb[("DynamoDB (State & Locks)")]
         secrets["Secrets Manager"]
         sns["SNS Escalation Topic"]
-        cloudwatchlogs[("CloudWatch Logs")]
-        ecr[("ECR")]
-        athena["Athena"]
     end
 
-    %% Alert Ingestion Flow
-    alertmanager -->|ClusterIP Service| receiver
-    cloudwatch -->|Event trigger| relay
-    relay -->|HTTPS internal traffic| alb
-    operator -.->|VPN / internal demo access| alb
-    alb -->|HTTPS 8443| receiver
+    %% Ingestion
+    cloudwatch -->|Trigger| relay -->|HTTPS| alb --> receiver
+    operator -.->|VPN Access| alb
+    alertmanager -->|ClusterIP| receiver
 
-    %% Processing Flow
-    receiver -->|validate / normalize / enrich| controller
-    controller -->|Call AI API via ClusterIP| ai
+    %% Processing
+    receiver -->|Validate & Enrich| controller
+    controller -->|Call AI via ClusterIP| ai
 
-    %% Fast Lane - Direct Patch
-    controller -->|Fast Lane: K8s API patch| tenantapp
+    %% Execution (Fast / Slow Lanes)
+    controller -->|Fast Lane: Direct Patch| tenantapp
+    controller -->|Trigger Slow Lane| commitengine
+    commitengine -->|Git Push| codecommit
+    argocd -->|Git Pull| codecommit
+    argocd -->|Sync & Deploy| tenantapp
 
-    %% Slow Lane - GitOps Commit
-    controller -->|Trigger slow-lane patch| commitengine
-    commitengine -->|Git push manifest changes| codecommit
-    argocd -->|Git pull / sync desired state| codecommit
-    argocd -->|Apply desired state| tenantapp
-
-    %% State, secrets, audit
-    controller -->|State / lock / idempotency| dynamodb
-    controller -->|Get secrets| secrets
-    controller -->|Optional sandbox config data| rds
-    controller -->|Audit events| firehose
-    firehose -->|Write immutable audit logs| s3
-    s3 -->|Query audit logs| athena
+    %% Integrations
+    controller -->|State / Lock| dynamodb
+    controller -->|Fetch Secrets| secrets
+    controller -->|Sandbox Config| rds
+    controller -->|Audit Logs| firehose -->|Stream| s3
 
     %% Escalation
-    controller -->|Escalation event| sns
+    controller -->|Escalate| sns
 
-    %% VPC endpoint usage
-    receiver -. AWS API via VPC Endpoint .-> VPCE
-    controller -. AWS API via VPC Endpoint .-> VPCE
-    commitengine -. CodeCommit via VPC Endpoint .-> VPCE
-    argocd -. CodeCommit via VPC Endpoint .-> VPCE
-
-    VPCE -. private access .-> AWSServices
+    %% Endpoints
+    EKS -.->|AWS API Private Access| vpce --> AWSServices
 ```
 
 Ranh giới mạng:
