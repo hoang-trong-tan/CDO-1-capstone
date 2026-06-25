@@ -189,6 +189,7 @@ truy cập workload được biểu diễn bằng SG reference khi có thể.
 | `irsa-patch-controller` | Controller ServiceAccount | Đọc approved patch intent, tạo thay đổi Kubernetes có giới hạn trong namespace được sở hữu, gọi STS, đọc Secrets Manager entry cần thiết |
 | `irsa-audit-writer` | Audit Writer ServiceAccount | `firehose:PutRecord`, `firehose:PutRecordBatch`, ghi S3 có scope qua Firehose delivery role, KMS encrypt với audit key |
 | `irsa-gitops-engine` | ArgoCD / GitOps Engine ServiceAccount | `codecommit:GitPull` và read-only CodeCommit API access chỉ cho CDO repository |
+| `irsa-git-commit-engine` | Git Commit Engine ServiceAccount | `codecommit:GitPull`, `codecommit:GitPush`, `codecommit:GetRepository`, `codecommit:CreateCommit` chỉ trên CDO CodeCommit repo; không có quyền mutate Kubernetes trực tiếp |
 | `irsa-karpenter-controller` | Karpenter ServiceAccount | Provision/terminate EC2 node class được phép, đọc SSM AMI parameter, chỉ pass EKS node instance profile đã duyệt |
 | `eks-node-role` | EKS managed node group và Karpenter node | Pull image từ ECR, publish CloudWatch agent, CNI permission, không có quyền truy cập application data |
 | `irsa-escalation-notifier` | Escalation worker ServiceAccount | `sns:Publish` chỉ đến escalation topic đã duyệt |
@@ -336,7 +337,7 @@ Events:
 
 - Nhận patch request.
 - Kết quả policy evaluation.
-- AI decision nhận từ AIOps, nếu áp dụng.
+- AI decision nhận từ AI Engine self-host trong namespace `self-heal-system`.
 - Direct patch được approve, reject hoặc block.
 - GitOps reconciliation bắt đầu và hoàn tất.
 - Kubernetes resource mutation được attempt và hoàn tất.
@@ -382,7 +383,7 @@ Ví dụ audit event:
 
 | Log type | Storage | Retention | Query interface |
 |---|---|---|---|
-| Application audit events | Kinesis Firehose đến S3 Object Lock bucket | 1 năm hot query, archive lâu hơn theo compliance policy | Athena |
+| Application audit events | Kinesis Firehose đến S3 Object Lock bucket | 90 ngày theo Object Lock COMPLIANCE mode (Production target có thể kéo dài retention/archive theo compliance policy) | Athena |
 | EKS API server audit logs | CloudWatch Logs encrypted log group | 90 ngày hot retention | CloudWatch Logs Insights |
 | CloudTrail management events | CloudTrail organization trail đến S3 | 1 năm hot query, sau đó archive | Athena / CloudTrail Lake nếu bật |
 | CloudTrail S3 data events | CloudTrail data event trail cho audit bucket | 1 năm hot query | Athena |
@@ -481,8 +482,7 @@ value.
       runtime GitOps.
 - [ ] Xác nhận SNS escalation subscriber, owner on-call và alert sẽ fan out sang
       Slack hay chỉ email.
-- [ ] Xác nhận mô hình exposure của ALB: chỉ approved operator CIDR, WAF
-      allowlist, hoặc private ALB sau VPN / corporate network.
+- [ ] Xác nhận SG/CIDR cụ thể của Internal Alert Relay và VPN/Internal Client được phép gọi vào Internal ALB.
 - [x] AI Engine đã được thống nhất self-host trong cụm EKS namespace `self-heal-system`.
 - [ ] Xác nhận retention period và Object Lock mode cho audit S3 bucket.
 
