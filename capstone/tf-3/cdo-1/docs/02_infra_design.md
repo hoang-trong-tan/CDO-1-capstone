@@ -27,6 +27,7 @@
 | Secrets Management | AWS Secrets Manager + ESO | Lưu credentials AI Engine, Git Deploy Key, DB creds. External Secrets Operator sync vào K8s Secret. | $2.40/month (6 secrets) |
 | VPC Endpoints | PrivateLink Gateway / Interface | Kết nối an toàn nội bộ tới S3, DynamoDB, Secrets Manager và Bedrock Runtime (không dùng NAT Gateway). | ~$29.30/month (2 AZs) |
 | Observability | Prometheus + Grafana + CloudWatch | Prometheus thu thập K8s metrics, AlertManager kích hoạt self-heal. CloudWatch Logs thu thập log hệ thống AWS-level. | ~$8.00/month |
+| Deployment Controller | **Argo Rollouts** | Custom Deployment Operator hỗ trợ cơ chế Canary và Blue-Green deployments nâng cao cho FastAPI Receiver. | Tích hợp Helm ($0/month) |
 
 ---
 
@@ -231,7 +232,7 @@ Hệ thống triển khai 5 cơ chế phòng vệ độc lập để ngăn chặ
 
 **Tăng/giảm Pod Replicas (HPA & Self-Heal Engine):**
 
-*   **HPA cơ bản:** Tự động tăng/giảm replicas của Webhook Receiver và Tenant Applications dựa trên CPU metrics nội bộ cụm.
+*   **HPA cơ bản:** Tự động tăng/giảm replicas của Webhook Receiver (HPA trỏ vào Argo Rollouts custom resource `Rollout`) và Tenant Applications (HPA trỏ vào `Deployment`) dựa trên CPU metrics nội bộ cụm.
 *   **Self-Heal Alert-driven Scaling (Cho SQS Queue Backlog):** HPA không can thiệp trực tiếp vào SQS depth. Thay vào đó, Prometheus watch metrics SQS qua CloudWatch exporter và AlertManager kích hoạt alert `QueueBacklog`. Webhook Receiver tiếp nhận alert, gọi AI Engine quyết định và kích hoạt Action `SCALE_WORKERS` (tăng replicas) qua luồng GitOps/Direct Patch.
 
 | Chiều | Điều kiện kích hoạt | Thời gian duy trì | Action |
@@ -264,7 +265,7 @@ Hệ thống triển khai 5 cơ chế phòng vệ độc lập để ngăn chặ
 
 | Failure (Sự cố) | Detection (Cách phát hiện) | Recovery (Cơ chế khôi phục) | RTO | RPO |
 | :--- | :--- | :--- | :--- | :--- |
-| **FastAPI Receiver pod crash** | K8s Liveness/Readiness probe | K8s kubelet tự động khởi động lại Pod. ALB tự động định tuyến sang pod standby còn lại trong ReplicaSet. | < 10s | 0 |
+| **FastAPI Receiver pod crash** | K8s probe / Argo AnalysisTemplate alert | K8s tự động restart Pod. Argo Rollouts tự động abort và rollback traffic về stable version nếu metrics vi phạm. | < 60s (Auto-abort) | 0 |
 | **Karpenter Spot Node bị thu hồi** | AWS Spot Interruption Notice (SQS) | Karpenter tự động cordon, drain node và provision node mới để reschedule pod sang node an toàn trước 2 phút. | < 120s (Không downtime) | 0 |
 | **Git / ArgoCD API down (GitOps path)** | Webhook Receiver connection timeout | Webhook Receiver tự động bypass GitOps, chuyển sang gọi Direct Patch (Fast Lane) qua K8s API để cứu cụm trước. | < 30s | 0 |
 | **RDS PostgreSQL (Single-AZ) fail** | CloudWatch RDS event / TCP timeout | AWS tự động reboot instance hoặc recreate instance mới, mount lại EBS Volume cũ (Production sẽ dùng Aurora Multi-AZ để failover < 60s). | < 10 phút | < 5 phút (từ daily snapshot/WAL) |
