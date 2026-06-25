@@ -18,6 +18,9 @@ Hệ thống tiếp nhận alert qua 2 luồng chính:
 
 ```mermaid
 flowchart TB
+    %% Style Definitions
+    classDef whiteNode fill:#fff,stroke:#333,stroke-width:1.5px,color:#000;
+
     %% External event sources
     cloudwatch["CloudWatch / EventBridge Alarms"]
     operator["Operator / Mentor (Demo/Admin)"]
@@ -47,6 +50,14 @@ flowchart TB
         secrets["Secrets Manager"]
         sns["SNS Escalation Topic"]
     end
+
+    %% Apply Styles to Nodes
+    class cloudwatch,operator,relay,alb,rds,vpce,alertmanager,receiver,controller,commitengine,ai,argocd,tenantapp,codecommit,firehose,s3,dynamodb,secrets,sns whiteNode;
+
+    %% Apply Styles to Subgraphs
+    style VPC fill:#f9f9f9,stroke:#333,stroke-width:1.5px,color:#000;
+    style EKS fill:#fff,stroke:#333,stroke-width:1.5px,color:#000;
+    style AWSServices fill:#f5f5f5,stroke:#333,stroke-width:1.5px,color:#000;
 
     %% Ingestion
     cloudwatch -->|Trigger| relay -->|HTTPS| alb --> receiver
