@@ -17,7 +17,7 @@ Hai đường thực thi:
 - **Kubernetes bootstrap:** Terraform + Helm.
 - **Application deployment:** Git + ArgoCD.
 Terraform quản lý:
-- VPC, subnet, route, NAT Gateway và VPC Endpoint;
+- VPC, subnet, route và VPC Endpoints;
 - EKS, Managed Node Group và Karpenter permissions;
 - ALB, ECR, RDS, DynamoDB, SQS và DLQ;
 - Data Firehose, S3 Object Lock, KMS và Secrets Manager;
@@ -368,14 +368,19 @@ Lỗi của Self-Heal Platform không quay lại Receiver để tránh vòng l�
 S3 Object Lock là canonical audit store.
 
 ## 9. Open questions
-- [ ] Alertmanager dùng ClusterIP hay Internal ALB?
-- [ ] Private subnet truy cập GitHub qua NAT hay egress proxy?
-- [ ] EKS kết nối AI Engine bằng Peering, PrivateLink hay public HTTPS?
-- [ ] AI authentication dùng SigV4, API key hay mTLS?
+- [x] **Alertmanager dùng ClusterIP hay Internal ALB?**  
+  *Giải quyết:* Chốt dùng **ClusterIP** nội bộ cụm để giảm latency và tăng bảo mật (bypass ALB).
+- [x] **Private subnet truy cập GitHub qua NAT hay egress proxy?**  
+  *Giải quyết:* Chốt không dùng internet/GitHub cho runtime. ArgoCD pull manifests từ **AWS CodeCommit** thông qua VPC Interface Endpoint.
+- [x] **EKS kết nối AI Engine bằng Peering, PrivateLink hay public HTTPS?**  
+  *Giải quyết:* Chốt **CDO tự host AI Engine** (Docker container) chạy trực tiếp trong cụm EKS (chung namespace `self-heal-system`), giao tiếp local API.
+- [x] **AI authentication dùng SigV4, API key hay mTLS?**  
+  *Giải quyết:* Chốt dùng **local authentication** (ServiceAccount token) do chạy in-cluster.
 - [ ] Git write credential dùng GitHub App, token hay deploy key?
 - [ ] RDS lưu dữ liệu nào mà DynamoDB/Git không đáp ứng?
 - [ ] Chọn EKS Pod Identity hay IRSA?
-- [ ] SQS dùng Standard hay FIFO?
+- [x] **SQS dùng Standard hay FIFO?**  
+  *Giải quyết:* Chốt dùng **SQS Standard** (trùng lặp/idempotency được xử lý ở app layer bằng DynamoDB Conditional Write).
 - [ ] Chốt inventory sáu secret.
 - [ ] Prometheus và CloudWatch Logs giữ dữ liệu bao lâu?
 - [ ] Distributed tracing là deliverable hay target design?
