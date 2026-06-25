@@ -165,7 +165,7 @@ truy cập workload được biểu diễn bằng SG reference khi có thể.
     account.
   - DynamoDB cho lock table và service integration khi áp dụng.
 - Interface VPC Endpoint:
-  - SQS (Optional / future async buffer, không nằm trong luồng runtime chính của W12).
+  - SQS cho asynchronous queue backlog buffer.
   - Kinesis Firehose cho audit delivery.
   - Secrets Manager để lấy secret.
   - KMS cho encrypt/decrypt call.
@@ -484,7 +484,8 @@ value.
       Slack hay chỉ email.
 - [ ] Xác nhận SG/CIDR cụ thể của Internal Alert Relay và VPN/Internal Client được phép gọi vào Internal ALB.
 - [x] AI Engine đã được thống nhất self-host trong cụm EKS namespace `self-heal-system`.
-- [ ] Xác nhận retention period và Object Lock mode cho audit S3 bucket.
+- [x] **Xác nhận retention period và Object Lock mode cho audit S3 bucket.**  
+      *Giải quyết:* Chốt dùng **COMPLIANCE mode, 90 days retention** cho capstone sandbox.
 
 ---
 
