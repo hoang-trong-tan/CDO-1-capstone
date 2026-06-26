@@ -204,6 +204,11 @@ resource "aws_eks_node_group" "system" {
 resource "aws_launch_template" "system_node" {
   name_prefix = "${var.name_prefix}-system-node-lt-"
 
+  vpc_security_group_ids = [
+    aws_eks_cluster.this.vpc_config[0].cluster_security_group_id,
+    var.sg_eks_workload_id
+  ]
+
   # IMDSv2 only — docs/03_security_design.md §6
   metadata_options {
     http_endpoint               = "enabled"
