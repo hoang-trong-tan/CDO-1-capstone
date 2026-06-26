@@ -15,7 +15,7 @@ resource "aws_security_group" "alb_internal" {
   # và/hoặc VPN client SG. Track tại: docs/03_security_design.md §1.2 hàng 36
   # và Open Question §8 (mục "Xác nhận SG/CIDR cụ thể của Internal Alert Relay").
   ingress {
-    description = "Allow HTTPS inbound from VPC (VPN/Client CIDR) - TODO(pre-prod): Thu hẹp về SG relay/VPN, xem 03_security_design.md §8"
+    description = "Allow HTTPS inbound from VPC (VPN/Client CIDR) - TODO(pre-prod): Narrow down to SG relay/VPN, see 03_security_design.md sec 8"
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
