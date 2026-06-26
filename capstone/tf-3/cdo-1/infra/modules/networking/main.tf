@@ -58,13 +58,13 @@ resource "aws_subnet" "public" {
 }
 
 # 4. Internet Gateway (Public routing only)
-resource "aws_internet_gateway" "this" {
-  vpc_id = aws_vpc.this.id
+# resource "aws_internet_gateway" "this" {
+#   vpc_id = aws_vpc.this.id
 
-  tags = merge(local.module_tags, {
-    Name = "${var.name_prefix}-igw"
-  })
-}
+#   tags = merge(local.module_tags, {
+#     Name = "${var.name_prefix}-igw"
+#   })
+# }
 
 # 5. Route Tables & Associations
 resource "aws_route_table" "public" {
