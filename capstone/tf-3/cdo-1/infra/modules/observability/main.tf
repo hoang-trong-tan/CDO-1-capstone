@@ -4,7 +4,13 @@
 locals {
   namespace          = "observability"
   grafana_service    = "kube-prometheus-stack-grafana"
-  alert_receiver_url = "http://patch-receiver.self-heal-system.svc.cluster.local:8443/alerts"
+  alert_receiver_url = "http://patch-receiver.self-heal-system.svc.cluster.local:8080/alerts"
+}
+
+data "aws_cloudwatch_log_group" "eks_control_plane" {
+  name = "/aws/eks/${var.cluster_name}/cluster"
+
+  depends_on = [aws_eks_cluster.this] # từ module.eks
 }
 
 resource "kubernetes_namespace" "observability" {
@@ -16,13 +22,6 @@ resource "kubernetes_namespace" "observability" {
       "self-heal.tf3-cdo1/mutate-ok" = "false"
     }
   }
-}
-
-resource "aws_cloudwatch_log_group" "eks_control_plane" {
-  name              = "/aws/eks/${var.cluster_name}/cluster"
-  retention_in_days = 90
-  kms_key_id        = var.kms_observability_arn
-  tags              = local.module_tags
 }
 
 resource "helm_release" "kube_prometheus_stack" {
