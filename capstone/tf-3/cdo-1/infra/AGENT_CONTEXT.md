@@ -210,6 +210,11 @@ trong `tags.tf` (đúng theo CLAUDE.md §4). `terraform validate` báo lỗi:
 **Vấn đề:** Bị lỗi `no matches for kind "IngressClassParams" in group "elbv2.k8s.aws" (CRD may not be installed)` ở vòng Plan. Nguyên nhân là resource `kubernetes_manifest` cố kết nối vào K8s API để validate schema ngay lúc Plan, nhưng bản thân cái CRD này lại được cài đặt bởi Helm Chart trong vòng Apply (tức là nó chưa tồn tại lúc Plan).
 **Fix:** Đổi `kubernetes_manifest` thành `kubectl_manifest` (của provider `gavinbunney/kubectl` đã được setup sẵn ở k8s-addons). Resource này lấy chuỗi `yaml_body` và apply trực tiếp, bỏ qua bước validate schema nên sẽ không bị lỗi con gà quả trứng.
 
+### BUG-11 — ĐÃ FIX: `ingress/versions.tf` — Lỗi Missing Provider
+**File:** `modules/ingress/versions.tf`
+**Vấn đề:** Sau khi đổi qua dùng `kubectl_manifest` ở BUG-10, Terraform báo lỗi `Failed to query available provider packages hashicorp/kubectl`. Lý do là Terraform 0.13+ yêu cầu khai báo rõ những provider không thuộc namespace của Hashicorp. Vì trong file `versions.tf` của module ingress chưa khai báo `kubectl`, Terraform tự hiểu lầm thành `hashicorp/kubectl` thay vì `gavinbunney/kubectl`.
+**Fix:** Thêm block `kubectl = { source = "gavinbunney/kubectl" }` vào `required_providers` của module ingress.
+
 ---
 ## 6. Files đã tạo/sửa trong session này (branch `tan-1`)
 
