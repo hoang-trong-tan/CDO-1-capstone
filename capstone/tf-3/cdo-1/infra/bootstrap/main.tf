@@ -218,9 +218,20 @@ resource "aws_iam_role_policy" "plan_tfstate_read" {
         ]
       },
       {
-        Sid      = "DynamoDBLockRead"
-        Effect   = "Allow"
-        Action   = ["dynamodb:DescribeTable", "dynamodb:GetItem"]
+        # terraform plan cũng acquire + release state lock theo mặc định của S3 backend:
+        #   PutItem   → ghi lock record (acquire)
+        #   GetItem   → đọc lock record (check existing lock)
+        #   DeleteItem → xóa lock record (release sau khi plan xong)
+        # Thiếu PutItem/DeleteItem → AccessDeniedException ngay lúc acquire lock.
+        # KHÔNG dùng -lock=false vì CI có thể chạy concurrent → race condition trên state.
+        Sid    = "DynamoDBLockAcquireRelease"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:DescribeTable",
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:DeleteItem"
+        ]
         Resource = aws_dynamodb_table.state_lock.arn
       },
       {
