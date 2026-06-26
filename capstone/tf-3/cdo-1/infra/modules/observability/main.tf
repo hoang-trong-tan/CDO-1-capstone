@@ -2,15 +2,35 @@
 # Alertmanager stays in-cluster and sends alerts to the receiver through ClusterIP.
 
 locals {
-  namespace          = "observability"
-  grafana_service    = "kube-prometheus-stack-grafana"
-  alert_receiver_url = "http://patch-receiver.self-heal-system.svc.cluster.local:8080/alerts"
+  namespace       = "observability"
+  grafana_service = "kube-prometheus-stack-grafana"
+
+  # FIX lỗi 4: "patch-receiver" không có Service backing
+  # CLAUDE.md §2: Webhook Receiver = FastAPI, namespace self-heal-system
+  # port: 8000 (FastAPI default), path: /alert (không phải /alerts)
+  alert_receiver_url = "http://webhook-receiver.self-heal-system.svc.cluster.local:8000/alert"
+
+  # CLAUDE.md §4: Component tag cho Cost Explorer
+  module_tags = merge(var.tags, {
+    Component = "observability"
+  })
 }
 
-data "aws_cloudwatch_log_group" "eks_control_plane" {
-  name = "/aws/eks/${var.cluster_name}/cluster"
+# FIX lỗi 2: Terraform tạo log group TRƯỚC khi EKS enable logging
+# → tránh ResourceAlreadyExists khi EKS tự tạo cùng tên
+# Phương án chọn: Terraform quản lý (tạo trước, EKS dùng lại)
+# Nếu log group đã tồn tại trên AWS, chạy:
+#   terraform import aws_cloudwatch_log_group.eks_control_plane /aws/eks/<cluster_name>/cluster
+resource "aws_cloudwatch_log_group" "eks_control_plane" {
+  name              = "/aws/eks/${var.cluster_name}/cluster"
+  retention_in_days = 30
 
-  depends_on = [aws_eks_cluster.this] # từ module.eks
+  # FIX lỗi 1 (phần observability): encrypt bằng observability CMK
+  # Yêu cầu KMS key policy trong modules/security phải có statement
+  # AllowCloudWatchLogs cho principal logs.<region>.amazonaws.com
+  kms_key_id = var.kms_observability_arn # CLAUDE.md §2: output từ security module
+
+  tags = local.module_tags
 }
 
 resource "kubernetes_namespace" "observability" {
@@ -112,7 +132,8 @@ resource "helm_release" "kube_prometheus_stack" {
   ]
 
   depends_on = [
+    # Log group phải tồn tại trước khi stack observability deploy
     aws_cloudwatch_log_group.eks_control_plane,
-    kubernetes_namespace.observability
+    kubernetes_namespace.observability,
   ]
 }

@@ -325,3 +325,45 @@ resource "helm_release" "aws_load_balancer_controller" {
     kubernetes_service_account.aws_load_balancer_controller
   ]
 }
+
+resource "kubernetes_ingress_class_v1" "alb_internal" {
+  metadata {
+    name = "alb-internal"
+  }
+  spec {
+    controller = "elbv2.k8s.aws/alb"
+    parameters {
+      api_group = "elbv2.k8s.aws"
+      kind      = "IngressClassParams"
+      name      = kubernetes_manifest.alb_internal_params.manifest.metadata.name
+    }
+  }
+  depends_on = [kubernetes_manifest.alb_internal_params]
+}
+
+# IngressClassParams resource
+resource "kubernetes_manifest" "alb_internal_params" {
+  manifest = {
+    apiVersion = "elbv2.k8s.aws/v1beta1"
+    kind       = "IngressClassParams"
+    metadata = {
+      name = "alb-internal-params"
+    }
+    spec = {
+      scheme = "internal"
+      subnets = {
+        ids = var.private_subnet_ids # ← nhận từ networking module output
+      }
+      securityGroups = {
+        ids = [var.sg_alb_internal_id] # ← cũng nên wrap trong object ids
+      }
+      tags = [
+        {
+          key   = "Component"
+          value = "ingress"
+        }
+      ]
+    }
+  }
+  depends_on = [helm_release.aws_load_balancer_controller] # ← fix depends_on
+}
