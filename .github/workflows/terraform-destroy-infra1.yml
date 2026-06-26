@@ -1,0 +1,93 @@
+name: Terraform Destroy (infra1)
+
+on:
+  workflow_dispatch: # Chỉ cho phép chạy bằng tay (manual trigger) để tránh xóa nhầm hạ tầng
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+  TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
+  TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET || 'tf3-cdo1-sandbox-tfstate-783459135560' }}
+  TF_VAR_tf_state_bucket: ${{ vars.TF_STATE_BUCKET || 'tf3-cdo1-sandbox-tfstate-783459135560' }}
+  TF_LOCK_TABLE: ${{ vars.TF_LOCK_TABLE || 'tf3-cdo1-sandbox-tfstate-lock' }}
+
+jobs:
+  # BƯỚC 1: XÓA K8S-ADDONS TRƯỚC
+  # Bắt buộc phải xóa các resources bên trong EKS trước khi xóa EKS Cluster
+  destroy-k8s-addons:
+    name: Destroy K8s Addons
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: "capstone/tf-3/cdo-1/infra1/k8s-addons"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.TF_AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.0"
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ env.TF_STATE_BUCKET }}" \
+            -backend-config="key=sandbox/infra1/k8s-addons/terraform.tfstate" \
+            -backend-config="region=${{ env.AWS_REGION }}" \
+            -backend-config="dynamodb_table=${{ env.TF_LOCK_TABLE }}"
+
+      - name: Terraform Destroy
+        run: terraform destroy -auto-approve -input=false
+
+
+  # BƯỚC 2: XÓA AWS-FOUNDATION
+  destroy-aws-foundation:
+    name: Destroy AWS Foundation
+    needs: destroy-k8s-addons # Đợi k8s-addons xóa xong mới xóa foundation
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: "capstone/tf-3/cdo-1/infra1/aws-foundation"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.TF_AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.0"
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ env.TF_STATE_BUCKET }}" \
+            -backend-config="key=sandbox/infra1/aws-foundation/terraform.tfstate" \
+            -backend-config="region=${{ env.AWS_REGION }}" \
+            -backend-config="dynamodb_table=${{ env.TF_LOCK_TABLE }}"
+
+      - name: Terraform Destroy
+        run: terraform destroy -auto-approve -input=false
