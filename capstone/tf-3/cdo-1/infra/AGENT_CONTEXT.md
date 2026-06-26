@@ -190,8 +190,17 @@ trong `tags.tf` (đúng theo CLAUDE.md §4). `terraform validate` báo lỗi:
 `Duplicate local value definition at tags.tf:4`.
 **Fix:** Xóa `module_tags` khỏi `main.tf`, giữ nguyên `tags.tf`.
 
----
+### BUG-7 — CRITICAL, ĐÃ FIX: `eks/main.tf` — Lỗi kết nối kubernetes provider (`localhost:80`)
+**File:** `modules/eks/main.tf` và `k8s-addons/namespaces.tf`
+**Vấn đề:** Các resource `kubernetes_namespace` được định nghĩa trong `eks/main.tf` chạy cùng chung 1 phase với lúc tạo EKS cluster (`aws-foundation`). Do provider `kubernetes` chưa thể configure được endpoint của cluster lúc nó chưa tồn tại, Terraform fallback về kết nối `localhost:80` và bị lỗi `connection refused`.
+**Fix:** Dời toàn bộ resource `kubernetes_namespace` sang project `k8s-addons/namespaces.tf`. Phase này (k8s-addons) được chạy sau khi cluster đã tạo xong, nên provider đã có đầy đủ credentials để kết nối.
 
+### BUG-8 — ĐÃ FIX: `eks/main.tf` — Sai schema `configuration_values` của vpc-cni
+**File:** `modules/eks/main.tf`
+**Vấn đề:** Cấu hình `vpc-cni` addons bị lỗi schema: `[$.env.ENABLE_NETWORK_POLICY: is not defined in the schema]`. Đối với version mới của vpc-cni addons, `enableNetworkPolicy` là property root, không nằm trong `env`.
+**Fix:** Đổi từ `jsonencode({env = {ENABLE_NETWORK_POLICY = "true"}})` thành `jsonencode({enableNetworkPolicy = "true"})`.
+
+---
 ## 6. Files đã tạo/sửa trong session này (branch `tan-1`)
 
 ### `manifests/ai-engine/service.yaml` — sửa comment

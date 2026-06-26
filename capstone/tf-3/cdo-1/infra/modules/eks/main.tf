@@ -264,9 +264,7 @@ resource "aws_eks_addon" "vpc_cni" {
   addon_name   = "vpc-cni"
   # enableNetworkPolicy required for INFRA-8 Kubernetes NetworkPolicy enforcement
   configuration_values = jsonencode({
-    env = {
-      ENABLE_NETWORK_POLICY = "true"
-    }
+    enableNetworkPolicy = "true"
   })
   tags       = local.module_tags
   depends_on = [aws_eks_node_group.system]
@@ -277,55 +275,4 @@ resource "aws_eks_addon" "pod_identity_agent" {
   addon_name   = "eks-pod-identity-agent"
   tags         = local.module_tags
   depends_on   = [aws_eks_node_group.system]
-}
-
-##############################################################################
-# 7. K8s NAMESPACES
-# Decision: create here (Terraform layer) so they exist before GitOps/Helm apply.
-# ADR reference: docs/08_adrs.md — "Create platform namespaces in Terraform, not GitOps"
-##############################################################################
-
-resource "kubernetes_namespace" "self_heal_system" {
-  metadata {
-    name = "self-heal-system"
-    labels = {
-      "name"                                       = "self-heal-system"
-      "pod-security.kubernetes.io/enforce"         = "restricted"
-      "pod-security.kubernetes.io/enforce-version" = "latest"
-    }
-  }
-  depends_on = [aws_eks_node_group.system]
-}
-
-resource "kubernetes_namespace" "tenant_payment" {
-  metadata {
-    name = "tenant-payment"
-    labels = {
-      "name"      = "tenant-payment"
-      "tenant_id" = "d3b07384-d113-495f-9f58-20d18d357d75"
-    }
-  }
-  depends_on = [aws_eks_node_group.system]
-}
-
-resource "kubernetes_namespace" "tenant_checkout" {
-  metadata {
-    name = "tenant-checkout"
-    labels = {
-      "name"      = "tenant-checkout"
-      "tenant_id" = "6c8b4b2b-4d45-4209-a1b4-4b532d56a31c"
-    }
-  }
-  depends_on = [aws_eks_node_group.system]
-}
-
-resource "kubernetes_namespace" "observability" {
-  metadata {
-    name = "observability"
-    labels = {
-      "name"                               = "observability"
-      "pod-security.kubernetes.io/enforce" = "privileged" # Prometheus node-exporter needs host access
-    }
-  }
-  depends_on = [aws_eks_node_group.system]
 }
