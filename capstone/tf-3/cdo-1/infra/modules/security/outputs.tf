@@ -30,5 +30,6 @@ output "kms_infra_arn" {
 
 output "kms_observability_arn" {
   description = "KMS key ARN cho observability logs — dùng bởi modules/observability"
-  value       = null # TODO(INFRA-3)
+  value       = aws_kms_key.cdo_observability_kms.arn
 }
+
