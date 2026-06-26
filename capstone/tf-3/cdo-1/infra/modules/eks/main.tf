@@ -4,7 +4,7 @@
 #
 # Apply order: terraform apply -target=module.eks BEFORE the rest (chicken-and-egg:
 # cluster is both resource and kubernetes/helm provider target — see providers.tf comment)
-
+#
 ##############################################################################
 # 1. EKS CLUSTER
 ##############################################################################
