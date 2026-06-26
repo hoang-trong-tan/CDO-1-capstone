@@ -18,7 +18,7 @@ resource "aws_eks_cluster" "this" {
     subnet_ids              = var.private_subnet_ids
     security_group_ids      = [var.sg_eks_control_plane_id]
     endpoint_private_access = true
-    endpoint_public_access  = false # No public endpoint — all traffic via VPC (docs/03_security_design.md §1.1)
+    endpoint_public_access  = true # Tạm bật public để Github Actions (ubuntu-latest) có thể gọi EKS API
   }
 
   # EKS Secrets envelope encryption (docs/03_security_design.md §4.1 alias/cdo-secrets-kms)

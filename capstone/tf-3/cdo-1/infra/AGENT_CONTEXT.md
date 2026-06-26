@@ -200,6 +200,11 @@ trong `tags.tf` (đúng theo CLAUDE.md §4). `terraform validate` báo lỗi:
 **Vấn đề:** Cấu hình `vpc-cni` addons bị lỗi schema: `[$.env.ENABLE_NETWORK_POLICY: is not defined in the schema]`. Đối với version mới của vpc-cni addons, `enableNetworkPolicy` là property root, không nằm trong `env`.
 **Fix:** Đổi từ `jsonencode({env = {ENABLE_NETWORK_POLICY = "true"}})` thành `jsonencode({enableNetworkPolicy = "true"})`.
 
+### BUG-9 — CRITICAL, ĐÃ FIX: `eks/main.tf` — K8s Addons bị Timeout khi kết nối EKS API (`dial tcp 10.42.5.116:443: i/o timeout`)
+**File:** `modules/eks/main.tf`
+**Vấn đề:** Theo thiết kế bảo mật ban đầu, EKS chỉ mở `endpoint_private_access = true` và khoá Public Endpoint. Do đó EKS API Server chỉ có private IP (`10.42.x.x`). Tuy nhiên, luồng CI/CD lại chạy trên Github Actions Runner (`ubuntu-latest` - nằm ngoài VPC). Do đó Terraform không thể gọi được EKS API để deploy ingress, karpenter, observability... dẫn đến Timeout 100%.
+**Fix:** Tạm thời bật `endpoint_public_access = true` trong `eks/main.tf` để Github Actions có thể tương tác với EKS API qua Internet. (Trong thực tế doanh nghiệp, nếu muốn đóng Public Endpoint thì bắt buộc phải dùng Self-hosted Github Runner đặt bên trong VPC).
+
 ---
 ## 6. Files đã tạo/sửa trong session này (branch `tan-1`)
 
