@@ -5,11 +5,13 @@ on:
     branches: ["main", "*"]
     paths:
       - "capstone/tf-3/cdo-1/infra1/**"
+      - "capstone/tf-3/cdo-1/infra/modules/**"
       - ".github/workflows/terraform-infra1.yml"
   pull_request:
     branches: ["main"]
     paths:
       - "capstone/tf-3/cdo-1/infra1/**"
+      - "capstone/tf-3/cdo-1/infra/modules/**"
       - ".github/workflows/terraform-infra1.yml"
   workflow_dispatch:
 
