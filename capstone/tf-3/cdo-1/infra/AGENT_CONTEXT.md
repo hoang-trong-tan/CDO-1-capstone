@@ -205,6 +205,11 @@ trong `tags.tf` (đúng theo CLAUDE.md §4). `terraform validate` báo lỗi:
 **Vấn đề:** Theo thiết kế bảo mật ban đầu, EKS chỉ mở `endpoint_private_access = true` và khoá Public Endpoint. Do đó EKS API Server chỉ có private IP (`10.42.x.x`). Tuy nhiên, luồng CI/CD lại chạy trên Github Actions Runner (`ubuntu-latest` - nằm ngoài VPC). Do đó Terraform không thể gọi được EKS API để deploy ingress, karpenter, observability... dẫn đến Timeout 100%.
 **Fix:** Tạm thời bật `endpoint_public_access = true` trong `eks/main.tf` để Github Actions có thể tương tác với EKS API qua Internet. (Trong thực tế doanh nghiệp, nếu muốn đóng Public Endpoint thì bắt buộc phải dùng Self-hosted Github Runner đặt bên trong VPC).
 
+### BUG-10 — ĐÃ FIX: `ingress/main.tf` — Lỗi CRD Validation của kubernetes_manifest
+**File:** `modules/ingress/main.tf`
+**Vấn đề:** Bị lỗi `no matches for kind "IngressClassParams" in group "elbv2.k8s.aws" (CRD may not be installed)` ở vòng Plan. Nguyên nhân là resource `kubernetes_manifest` cố kết nối vào K8s API để validate schema ngay lúc Plan, nhưng bản thân cái CRD này lại được cài đặt bởi Helm Chart trong vòng Apply (tức là nó chưa tồn tại lúc Plan).
+**Fix:** Đổi `kubernetes_manifest` thành `kubectl_manifest` (của provider `gavinbunney/kubectl` đã được setup sẵn ở k8s-addons). Resource này lấy chuỗi `yaml_body` và apply trực tiếp, bỏ qua bước validate schema nên sẽ không bị lỗi con gà quả trứng.
+
 ---
 ## 6. Files đã tạo/sửa trong session này (branch `tan-1`)
 

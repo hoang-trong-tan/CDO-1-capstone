@@ -335,15 +335,15 @@ resource "kubernetes_ingress_class_v1" "alb_internal" {
     parameters {
       api_group = "elbv2.k8s.aws"
       kind      = "IngressClassParams"
-      name      = kubernetes_manifest.alb_internal_params.manifest.metadata.name
+      name      = "alb-internal-params"
     }
   }
-  depends_on = [kubernetes_manifest.alb_internal_params]
+  depends_on = [kubectl_manifest.alb_internal_params]
 }
 
 # IngressClassParams resource
-resource "kubernetes_manifest" "alb_internal_params" {
-  manifest = {
+resource "kubectl_manifest" "alb_internal_params" {
+  yaml_body = yamlencode({
     apiVersion = "elbv2.k8s.aws/v1beta1"
     kind       = "IngressClassParams"
     metadata = {
@@ -364,6 +364,6 @@ resource "kubernetes_manifest" "alb_internal_params" {
         }
       ]
     }
-  }
+  })
   depends_on = [helm_release.aws_load_balancer_controller] # ← fix depends_on
 }
