@@ -215,6 +215,16 @@ trong `tags.tf` (đúng theo CLAUDE.md §4). `terraform validate` báo lỗi:
 **Vấn đề:** Sau khi đổi qua dùng `kubectl_manifest` ở BUG-10, Terraform báo lỗi `Failed to query available provider packages hashicorp/kubectl`. Lý do là Terraform 0.13+ yêu cầu khai báo rõ những provider không thuộc namespace của Hashicorp. Vì trong file `versions.tf` của module ingress chưa khai báo `kubectl`, Terraform tự hiểu lầm thành `hashicorp/kubectl` thay vì `gavinbunney/kubectl`.
 **Fix:** Thêm block `kubectl = { source = "gavinbunney/kubectl" }` vào `required_providers` của module ingress.
 
+### BUG-12 — CRITICAL, ĐÃ FIX: `networking/main.tf` — Webhook Timeout do thiếu VPC Endpoint
+**File:** `modules/networking/main.tf`
+**Vấn đề:** `helm_release.aws_load_balancer_controller` bị treo (context deadline exceeded) và `helm_release.karpenter` báo lỗi không gọi được webhook `mservice.elbv2.k8s.aws`. Nguyên nhân sâu xa là do cluster đang chạy hoàn toàn trong mạng Private (không có NAT Gateway). AWS Load Balancer Controller pod khởi động lên cần phải gọi AWS ELB API để kiểm tra load balancers, nhưng lại không gọi được vì thiếu VPC Endpoint cho dịch vụ `elasticloadbalancing`. Hậu quả là pod ALBC không thể Ready, webhook service không có endpoints nào hứng request, dẫn đến mọi lệnh gọi tạo Service của Karpenter đều bị rớt.
+**Fix:** Thêm `elasticloadbalancing` vào danh sách `interface_services` trong module networking.
+
+### BUG-13 — ĐÃ FIX: `observability/main.tf` — Resource Already Exists & Duplicate
+**File:** `modules/observability/main.tf`
+**Vấn đề:** Lỗi tạo log group `/aws/eks/cluster` báo `ResourceAlreadyExistsException` (do EKS đã tự tạo log group này khi bật `enabled_cluster_log_types`) và lỗi `namespaces observability already exists` (do đã được khai báo ở `namespaces.tf` từ trước).
+**Fix:** Comment bỏ block tạo `aws_cloudwatch_log_group` và `kubernetes_namespace` trong module observability để tránh xung đột với tài nguyên đã có sẵn, gỡ `depends_on` cho log group khỏi helm_release.
+
 ---
 ## 6. Files đã tạo/sửa trong session này (branch `tan-1`)
 
