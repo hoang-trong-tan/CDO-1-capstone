@@ -1,4 +1,3 @@
-```gitignore
 # ============================================================
 # .gitignore — capstone-phase2
 # Stack: Terraform · Python/FastAPI · Docker · GitHub Actions
@@ -99,11 +98,14 @@ htmlcov/
 # Secrets & Credentials — KHÔNG BAO GIỜ COMMIT
 # ────────────────────────────────────────
 
-# AWS credentials
+# AWS credentials (file thật — .aws/credentials, aws-credentials)
 .aws/
 aws-credentials
 *credentials*
 *_credentials
+# Ngoại lệ: doc hướng dẫn setup credentials (không chứa giá trị thật)
+!*credentials*.md
+!*credentials*.example
 
 # SSH keys
 *.pem
@@ -127,10 +129,10 @@ kube.config
 # Bất kỳ file nào tên chứa "secret" hoặc "password"
 *secret*
 *password*
-
 # Ngoại lệ: file example và doc
 !*secret*.example
 !*secret*.md
+!*password*.md
 
 # ────────────────────────────────────────
 # OS & Editor
@@ -197,4 +199,3 @@ node_modules/
 npm-debug.log*
 yarn-error.log*
 .npm/
-```
