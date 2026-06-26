@@ -101,8 +101,7 @@ jobs:
         run: terraform plan -no-color -input=false
 
       - name: Terraform Apply
-        # Chỉ apply thật trên nhánh main (bạn có thể đổi điều kiện tuỳ ý)
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test') && github.event_name == 'push'
         run: terraform apply -auto-approve -input=false
 
 
@@ -149,5 +148,5 @@ jobs:
         run: terraform plan -no-color -input=false
 
       - name: Terraform Apply
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test') && github.event_name == 'push'
         run: terraform apply -auto-approve -input=false
