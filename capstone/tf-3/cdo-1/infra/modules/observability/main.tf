@@ -15,34 +15,31 @@ locals {
 # Phương án chọn: Terraform quản lý (tạo trước, EKS dùng lại)
 # Nếu log group đã tồn tại trên AWS, chạy:
 #   terraform import aws_cloudwatch_log_group.eks_control_plane /aws/eks/<cluster_name>/cluster
-resource "aws_cloudwatch_log_group" "eks_control_plane" {
-  name              = "/aws/eks/${var.cluster_name}/cluster"
-  retention_in_days = 30
+# resource "aws_cloudwatch_log_group" "eks_control_plane" {
+#   name              = "/aws/eks/${var.cluster_name}/cluster"
+#   retention_in_days = 30
+#
+#   kms_key_id = var.kms_observability_arn
+#
+#   tags = local.module_tags
+# }
 
-  # FIX lỗi 1 (phần observability): encrypt bằng observability CMK
-  # Yêu cầu KMS key policy trong modules/security phải có statement
-  # AllowCloudWatchLogs cho principal logs.<region>.amazonaws.com
-  kms_key_id = var.kms_observability_arn # CLAUDE.md §2: output từ security module
-
-  tags = local.module_tags
-}
-
-resource "kubernetes_namespace" "observability" {
-  metadata {
-    name = local.namespace
-    labels = {
-      "app.kubernetes.io/name"       = local.namespace
-      "platform.tf3-cdo1/protected"  = "true"
-      "self-heal.tf3-cdo1/mutate-ok" = "false"
-    }
-  }
-}
+# resource "kubernetes_namespace" "observability" {
+#   metadata {
+#     name = local.namespace
+#     labels = {
+#       "app.kubernetes.io/name"       = local.namespace
+#       "platform.tf3-cdo1/protected"  = "true"
+#       "self-heal.tf3-cdo1/mutate-ok" = "false"
+#     }
+#   }
+# }
 
 resource "helm_release" "kube_prometheus_stack" {
   name       = "kube-prometheus-stack"
   repository = "https://prometheus-community.github.io/helm-charts"
   chart      = "kube-prometheus-stack"
-  namespace  = kubernetes_namespace.observability.metadata[0].name
+  namespace  = local.namespace
   version    = "61.7.2"
 
   values = [
@@ -125,9 +122,8 @@ resource "helm_release" "kube_prometheus_stack" {
     })
   ]
 
-  depends_on = [
-    # Log group phải tồn tại trước khi stack observability deploy
-    aws_cloudwatch_log_group.eks_control_plane,
-    kubernetes_namespace.observability,
-  ]
+  # depends_on = [
+  #   aws_cloudwatch_log_group.eks_control_plane,
+  #   kubernetes_namespace.observability,
+  # ]
 }
