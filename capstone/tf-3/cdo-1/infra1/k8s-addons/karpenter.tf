@@ -1,5 +1,5 @@
 module "karpenter" {
-  source = "../../../../infra/modules/karpenter"
+  source = "../../infra/modules/karpenter"
 
   cluster_name       = data.terraform_remote_state.aws_foundation.outputs.cluster_name
   oidc_provider_arn  = data.terraform_remote_state.aws_foundation.outputs.oidc_provider_arn

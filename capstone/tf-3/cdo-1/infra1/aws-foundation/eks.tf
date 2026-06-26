@@ -1,5 +1,5 @@
 module "eks" {
-  source = "../../../../infra/modules/eks"
+  source = "../../infra/modules/eks"
 
   vpc_id                  = module.networking.vpc_id
   private_subnet_ids      = module.networking.private_subnet_ids

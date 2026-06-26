@@ -1,5 +1,5 @@
 module "ingress" {
-  source = "../../../../infra/modules/ingress"
+  source = "../../infra/modules/ingress"
 
   cluster_name       = data.terraform_remote_state.aws_foundation.outputs.cluster_name
   cluster_endpoint   = data.terraform_remote_state.aws_foundation.outputs.cluster_endpoint
