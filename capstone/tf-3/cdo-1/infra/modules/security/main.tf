@@ -275,7 +275,50 @@ resource "aws_kms_key" "keys" {
         }
       }
     ]
-  }) : null
+  }) : (
+    each.key == "cdo-infra-kms" ? jsonencode({
+      Version = "2012-10-17"
+      Id      = "${each.key}-policy"
+      Statement = [
+        {
+          Sid       = "EnableRootAccountFullAccess"
+          Effect    = "Allow"
+          Principal = { AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root" }
+          Action    = "kms:*"
+          Resource  = "*"
+        },
+        {
+          Sid       = "AllowAutoScalingToUseKMSForEBS"
+          Effect    = "Allow"
+          Principal = { 
+            AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling" 
+          }
+          Action    = [
+            "kms:Encrypt",
+            "kms:Decrypt",
+            "kms:ReEncrypt*",
+            "kms:GenerateDataKey*",
+            "kms:DescribeKey"
+          ]
+          Resource  = "*"
+        },
+        {
+          Sid       = "AllowAutoScalingToCreateGrants"
+          Effect    = "Allow"
+          Principal = { 
+            AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling" 
+          }
+          Action    = "kms:CreateGrant"
+          Resource  = "*"
+          Condition = {
+            Bool = {
+              "kms:GrantIsForAWSResource" = "true"
+            }
+          }
+        }
+      ]
+    }) : null
+  )
 
   tags = merge(
     local.module_tags,
