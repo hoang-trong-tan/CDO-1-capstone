@@ -20,3 +20,9 @@ variable "environment" {
   type        = string
   default     = "sandbox"
 }
+
+variable "tags" {
+  description = "Map tags truyền từ root (để trống hoặc không dùng ở module bootstrap)"
+  type        = map(string)
+  default     = {}
+}

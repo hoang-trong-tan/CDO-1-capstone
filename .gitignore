@@ -1,3 +1,4 @@
+```gitignore
 # ============================================================
 # .gitignore — capstone-phase2
 # Stack: Terraform · Python/FastAPI · Docker · GitHub Actions
@@ -24,11 +25,15 @@
 *.tfstate.*
 *.tfstate.backup
 
-# tfvars có giá trị thật — chỉ commit *.tfvars.example
+# tfvars có giá trị thật — chỉ commit file example
 terraform.tfvars
+*.tfvars
+*.tfvars.json
 *.auto.tfvars
+
 # Giữ lại example files
 !*.tfvars.example
+!*.tfvars.json.example
 
 # Crash log từ Terraform
 crash.log
@@ -122,6 +127,7 @@ kube.config
 # Bất kỳ file nào tên chứa "secret" hoặc "password"
 *secret*
 *password*
+
 # Ngoại lệ: file example và doc
 !*secret*.example
 !*secret*.md
@@ -191,3 +197,4 @@ node_modules/
 npm-debug.log*
 yarn-error.log*
 .npm/
+```
